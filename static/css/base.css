@@ -1,0 +1,8 @@
+#kof {
+    width: 752px;
+    height: 360px;
+
+    background-image: url("/static/images/background/0.gif");
+    /* background-size: 200% 100%; */
+    /* background-position: top; */
+}
