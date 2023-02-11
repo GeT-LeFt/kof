@@ -30,6 +30,10 @@ export class Player extends AcGameObjects {
         this.gravity = 30;
         // 定义角色状态机：0-idle空闲，1-向前，2-向后，3-跳跃，4-攻击，5-被打，6-死亡
         this.status = 3;
+        // 存储角色动作
+        this.animations = new Map();
+        // 记录当前过了多少帧
+        this.frame_current_cnt = 0;
     }
 
     // 初始执行一次
@@ -37,7 +41,9 @@ export class Player extends AcGameObjects {
 
     update_move() {
         // 实现重力逻辑
-        this.vy += this.gravity;
+        if (this.status === 3) {
+            this.vy += this.gravity;
+        }
 
         this.x += (this.vx * this.timedelta) / 1000;
         this.y += (this.vy * this.timedelta) / 1000;
@@ -59,7 +65,6 @@ export class Player extends AcGameObjects {
             this.x = this.root.game_map.$canvas.width() - this.width;
             this.status = 0;
         }
-        console.log(this.x);
     }
 
     update_control() {
@@ -73,12 +78,17 @@ export class Player extends AcGameObjects {
             w = this.pressed_keys.has("ArrowUp");
             a = this.pressed_keys.has("ArrowLeft");
             d = this.pressed_keys.has("ArrowRight");
-            space = this.pressed_keys.has(" ");
+            space = this.pressed_keys.has("Enter");
         }
 
         // 0和1的状态，静止和移动状态开始操作
         if (this.status === 0 || this.status === 1) {
-            if (w) {
+            if (space) {
+                // 攻击判断
+                this.status = 4;
+                this.vx = 0;
+                this.frame_current_cnt = 0;
+            } else if (w) {
                 if (d) {
                     // 右上方跳，组合键：wd
                     this.vx = this.speedx;
@@ -91,6 +101,7 @@ export class Player extends AcGameObjects {
                 }
                 this.vy = this.speedy;
                 this.status = 3;
+                this.frame_current_cnt = 0; // 防止鬼畜
             } else if (d) {
                 // 右移，键：d
                 this.vx = this.speedx;
@@ -106,15 +117,76 @@ export class Player extends AcGameObjects {
         }
     }
 
+    update_direction() {
+        let players = this.root.players;
+        if (players[0] && players[1]) {
+            let me = this,
+                you = players[1 - this.id];
+            if (me.x < you.x) me.direction = 1;
+            else me.direction = -1;
+        }
+    }
+
     // 每一帧执行一次（除了第一帧之外）
     update() {
         this.update_control();
         this.update_move();
+        this.update_direction();
         this.render();
     }
 
     render() {
-        this.ctx.fillStyle = this.color;
-        this.ctx.fillRect(this.x, this.y, this.width, this.height);
+        // this.ctx.fillStyle = this.color;
+        // this.ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        let status = this.status;
+
+        if (this.status === 1 && this.direction * this.vx < 0) status = 2; // 判断前进还是后退
+
+        let obj = this.animations.get(status);
+        if (obj && obj.loaded) {
+            if (this.direction > 0) {
+                let k =
+                    parseInt(this.frame_current_cnt / obj.frame_rate) %
+                    obj.frame_cnt;
+                let image = obj.gif.frames[k].image;
+                this.ctx.drawImage(
+                    image,
+                    this.x,
+                    this.y + obj.offset_y,
+                    image.width * obj.scale,
+                    image.height * obj.scale
+                );
+            } else {
+                this.ctx.save();
+                this.ctx.scale(-1, 1);
+                this.ctx.translate(-this.root.game_map.$canvas.width(), 0);
+
+                let k =
+                    parseInt(this.frame_current_cnt / obj.frame_rate) %
+                    obj.frame_cnt;
+                let image = obj.gif.frames[k].image;
+                this.ctx.drawImage(
+                    image,
+                    this.root.game_map.$canvas.width() - this.width - this.x,
+                    this.y + obj.offset_y,
+                    image.width * obj.scale,
+                    image.height * obj.scale
+                );
+
+                this.ctx.restore();
+            }
+        }
+
+        if (status === 4) {
+            if (
+                this.frame_current_cnt ==
+                obj.frame_rate * (obj.frame_cnt - 1)
+            ) {
+                this.status = 0;
+            }
+        }
+
+        this.frame_current_cnt++;
     }
 }
