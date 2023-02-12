@@ -51,7 +51,7 @@ export class Player extends AcGameObjects {
         if (this.y > 200) {
             this.y = 200;
             this.vy = 0;
-            this.status = 0;
+            if (this.status === 3) this.status = 0;
         }
 
         if (this.x < 0) {
