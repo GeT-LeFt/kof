@@ -34,6 +34,9 @@ export class Player extends AcGameObjects {
         this.animations = new Map();
         // 记录当前过了多少帧
         this.frame_current_cnt = 0;
+        // 血量
+        this.hp = 100;
+        this.$hp = this.root.$kof.find(`.kof-head-hp-${this.id}>div`);
     }
 
     // 初始执行一次
@@ -41,9 +44,7 @@ export class Player extends AcGameObjects {
 
     update_move() {
         // 实现重力逻辑
-        if (this.status === 3) {
-            this.vy += this.gravity;
-        }
+        this.vy += this.gravity;
 
         this.x += (this.vx * this.timedelta) / 1000;
         this.y += (this.vy * this.timedelta) / 1000;
@@ -118,6 +119,7 @@ export class Player extends AcGameObjects {
     }
 
     update_direction() {
+        if (this.status === 6) return; // 倒地之后不变方向
         let players = this.root.players;
         if (players[0] && players[1]) {
             let me = this,
@@ -127,17 +129,107 @@ export class Player extends AcGameObjects {
         }
     }
 
+    is_attack() {
+        this.status = 5;
+        this.frame_current_cnt = 0;
+
+        this.hp = Math.max(this.hp - 10, 0); // 防止出现负数
+
+        this.$hp.animate(
+            {
+                // 渐变效果
+                width: (this.$hp.parent().width() * this.hp) / 100, // 计算调整血条长度
+            },
+            "300"
+        );
+
+        if (this.hp <= 0) {
+            this.status = 6;
+            this.frame_current_cnt = 0;
+            this.vx = 0;
+        }
+    }
+
+    is_collision(r1, r2) {
+        if (Math.max(r1.x1, r2.x1) > Math.min(r1.x2, r2.x2)) return false;
+        if (Math.max(r1.y1, r2.y1) > Math.min(r1.y2, r2.y2)) return false;
+        return true;
+    }
+
+    update_attack() {
+        if (this.status === 4 && this.frame_current_cnt === 55) {
+            let me = this,
+                you = this.root.players[1 - this.id];
+            let r1;
+            // r1为拳头红色矩形，r2为对方蓝色矩形
+            if (this.direction > 0) {
+                r1 = {
+                    x1: me.x + 63, // 红色方块左上角坐标
+                    y1: me.y + 16,
+                    x2: me.x + 63 + 50, // 红色方块右下角坐标
+                    y2: me.y + 16 + 20,
+                };
+            } else {
+                // 逆向
+                r1 = {
+                    x1: me.x - 63, // 红色方块左上角坐标
+                    y1: me.y + 16,
+                    x2: me.x + 63 + 50, // 红色方块右下角坐标
+                    y2: me.y + 16 + 20,
+                };
+            }
+
+            let r2 = {
+                // 对手蓝色矩形左上和右下
+                x1: you.x - 15,
+                y1: you.y,
+                x2: you.x + you.width,
+                y2: you.y + you.height - 24,
+            };
+
+            if (this.is_collision(r1, r2)) {
+                you.is_attack();
+            }
+        }
+    }
+
     // 每一帧执行一次（除了第一帧之外）
     update() {
         this.update_control();
         this.update_move();
         this.update_direction();
+        this.update_attack();
+
         this.render();
     }
 
     render() {
-        // this.ctx.fillStyle = this.color;
-        // this.ctx.fillRect(this.x, this.y, this.width, this.height);
+        // // 碰撞检测盒子;
+        // if (this.direction > 0) {
+        //     this.ctx.fillStyle = "red";
+        //     this.ctx.fillRect(this.x + 63, this.y + 16, 50, 20);
+        //     this.ctx.fillStyle = "blue";
+        //     this.ctx.fillRect(
+        //         this.x,
+        //         this.y,
+        //         this.width + 14,
+        //         this.height - 24
+        //     );
+        // } else {
+        //     // 逆向情况
+        //     this.ctx.fillStyle = "red";
+        //     this.ctx.fillRect(this.x - 63, this.y + 16, 50, 20);
+        //     this.ctx.fillStyle = "blue";
+        //     this.ctx.fillRect(
+        //         this.x - 15,
+        //         this.y,
+        //         this.width + 14,
+        //         this.height - 24
+        //     );
+        // }
+
+        // this.ctx.fillStyle = "green";
+        // this.ctx.fillRect(485, 200, 50, 20);
 
         let status = this.status;
 
@@ -178,12 +270,17 @@ export class Player extends AcGameObjects {
             }
         }
 
-        if (status === 4) {
+        // 恢复站立状态
+        if (status === 4 || status === 5 || status === 6) {
             if (
                 this.frame_current_cnt ==
                 obj.frame_rate * (obj.frame_cnt - 1)
             ) {
-                this.status = 0;
+                if (status === 6) {
+                    this.frame_current_cnt--;
+                } else {
+                    this.status = 0;
+                }
             }
         }
 
